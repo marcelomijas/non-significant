@@ -1,0 +1,321 @@
+---
+output:
+  html_document:
+    df_print: paged
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.align = "center", fig.width = 6)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# package loading
+library(ggplot2)
+library(gridExtra)
+library(mFilter)
+library(seasonal)
+library(zoo)
+source(file = "../R/write.zoo.dat.R")
+```
+
+```{r}
+# data loading
+data_ea <- read.csv.zoo("../data/raw_data/data_ea.csv",
+  sep = ";",
+  FUN = as.yearqtr,
+  regular = TRUE
+)
+```
+
+```{r}
+# time series format
+eonia_to <- data_ea$eonia_to |> as.ts()
+estr <- data_ea$estr |> as.ts()
+ipi_nsa <- data_ea$ipi_nsa |> as.ts()
+defl_nsa <- data_ea$defl_nsa |> as.ts()
+time <- zooreg(1:nrow(data_ea), order.by = index(data_ea), frequency = 4) |> as.ts()
+```
+
+# Preparations
+
+## Variable names and descriptions
+
+| Variable name | Description                                  |
+|---------------|----------------------------------------------|
+| `eonia`       | Eonia                                        |
+| `eonia_to`    | Eonia with €STR methodology + 8.5 bp         |
+| `estr`        | Euro short-term rate, €STR                   |
+| `ipi_nsa`     | Industrial Production Index (2015 = 100) NSA |
+| `defl_nsa`    | GDP deflator (2015 = 100) NSA                |
+| `time`        | Time trend                                   |
+
+## Annual inflation
+
+### GDP deflator seasonal adjustment
+
+Adjusting the GDP deflator `defl` via X-13ARIMA-SEATS, we obtain the seasonally adjusted GDP deflator `defl_sa`.
+
+```{r}
+defl <- seas(defl_nsa) |> final()
+data_ea$defl <- defl
+```
+
+```{r echo=FALSE, fig.height=4.5, warning=FALSE}
+p1 <- autoplot.zoo(cbind(defl_nsa, defl), facets = NULL) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  scale_color_manual(
+    labels = c(
+      "Original (defl_nsa)",
+      "Adjusted (defl)"
+    ),
+    values = c("black", "red")
+  ) +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+
+p2 <- autoplot.zoo(defl_nsa - defl) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 11),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  ) +
+  labs(title = "Cycle") +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+
+grid.arrange(p1, p2,
+  layout_matrix = cbind(c(1, 2)),
+  heights = c(2, 1)
+)
+rm(p1, p2)
+```
+
+\newpage
+
+### Seasonally adjusted GDP deflator percent change
+
+Taking the percentage change of `defl`, we obtain the annual inflation rate created from the GDP deflator, `inf`.
+
+```{r echo=FALSE}
+inf <- (diff(as.zoo(defl), lag = 4, differences = 1, na.pad = T) / as.zoo(defl)) * 100
+data_ea$inf <- inf
+```
+
+```{r echo=FALSE, fig.height=3, warning=FALSE}
+p1 <- autoplot.zoo(defl) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 11),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+  ) +
+  labs(title = "defl") +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+
+p2 <- autoplot.zoo(inf) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 11),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+  ) +
+  labs(title = "inf") +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+
+grid.arrange(p1, p2,
+  layout_matrix = rbind(c(1, 2))
+)
+rm(p1, p2)
+```
+
+## Output gap
+
+### Industrial Production Index seasonal adjustment
+
+Adjusting the Industrial Production Index `ipi_nsa` via X-13ARIMA-SEATS, we obtain the seasonally adjusted Industrial Production Index `ipi`.
+
+```{r}
+ipi <- seas(ipi_nsa) |> final()
+data_ea$ipi <- ipi
+```
+
+```{r echo=FALSE, fig.height=4, warning=FALSE}
+p1 <- autoplot.zoo(cbind(ipi_nsa, ipi), facets = NULL) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  scale_color_manual(
+    labels = c(
+      "Original (ipi_nsa)",
+      "Adjusted (ipi)"
+    ),
+    values = c("black", "red")
+  ) +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+
+p2 <- autoplot.zoo(ipi_nsa - ipi) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 11),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  ) +
+  labs(title = "Cycle") +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+
+grid.arrange(p1, p2,
+  layout_matrix = cbind(c(1, 2)),
+  heights = c(2, 1)
+)
+rm(p1, p2)
+```
+
+### Seasonally adjusted Industrial Production Index Hodrick-Prescott filter
+
+The creation of the output gap using the Industrial Production Index is done via obtaining the cyclical component of a Hodrick-Prescott filter with $\lambda = 1600$ on the seasonally adjusted Industrial Production Index `ipi`. The cyclical component obtained is multiplied by 100 on order to obtain the output gap `ogap`.
+
+```{r}
+ipi_hpf <- hpfilter(log(ipi), freq = 1600)
+ogap <- ipi_hpf$cycle * 100
+data_ea$ogap <- ogap
+```
+
+```{r echo=FALSE, fig.height=3.5, warning=FALSE}
+p1 <- autoplot.zoo(cbind(log(ipi), ipi_hpf$trend), facets = NULL) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  scale_color_manual(
+    labels = c(
+      "log(ipi)",
+      expression(paste("log(ipi), Hodrick-Prescott filter (", lambda, " = 1600)"))
+    ),
+    values = c(
+      "black",
+      "red"
+    )
+  ) +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+
+p2 <- autoplot.zoo(ipi_hpf$cycle) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 11),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Residuals") +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+
+grid.arrange(p1, p2,
+  layout_matrix = cbind(
+    c(1, 2)
+  ),
+  heights = c(2, 1)
+)
+rm(p1, p2)
+```
+
+## Interest rate
+
+In 2019, the European Central Bank (ECB), made the decision of deprecate the EONIA rate in favor of the euro short term rate (€STR).
+
+In order to achieve an smooth transition from the EONIA to the €STR, the ECB released an EONIA computed with a new methodology that consist of the €STR plus a fixed spread of 8.5 basis points until January 3rd 2022. The EONIA with the original methodology was discontinued October 2nd 2019.
+
+```{r echo=FALSE, fig.height=2.5, warning=FALSE}
+autoplot.zoo(cbind(eonia_to, estr), facets = NULL) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  scale_color_manual(
+    labels = c(
+      "eonia_to",
+      "estr"
+    ),
+    values = c(
+      "black",
+      "red"
+    )
+  ) +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+```
+
+```{r}
+irate <- rbind(
+  window(as.zoo(eonia_to), start = "1999 Q1", end = "2019 Q4"),
+  window(as.zoo(estr), start = "2020 Q1")
+) |> as.ts()
+data_ea$irate <- irate
+```
+
+```{r echo=FALSE, fig.height=2}
+autoplot.zoo(irate, facets = NULL) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  scale_x_continuous(breaks = seq(1994, 2024, 2))
+```
+
+```{r}
+# getting only the needed series and periods
+data_ea_v1 <- merge(
+  data_ea$irate,
+  data_ea$inf,
+  data_ea$ogap,
+  data_ea$defl,
+  data_ea$ipi,
+  suffixes = c("irate", "inf", "ogap", "defl", "ipi")
+) |>
+  window(start = "1999 Q1", end = "2019 Q4")
+
+data_ea_v1 <- round(data_ea_v1, 5)
+```
+
+```{r}
+# write to .csv file
+write.zoo(
+  data_ea_v1,
+  file = "../data/processed_data/data_ea_v1.csv",
+  sep = ";"
+)
+```
+
+```{r}
+# write to .dat file
+write.zoo.dat(data_ea_v1,
+  file = "../data/processed_data/data_ea_v1.dat",
+  comment = paste("Date", Sys.Date())
+)
+```
